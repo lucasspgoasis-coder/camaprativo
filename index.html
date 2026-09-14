@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agro Analytics — Relatório Comparativo Executivo</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- PapaParse para ler CSV -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    
+    <!-- Chart.js + DataLabels Plugin -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
+
+    <!-- html2canvas e jsPDF para exportação de PDF e JPEG em folha única -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <!-- Fonte Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f1f5f9;
+            color: #0f172a;
+        }
+        
+        .loader {
+            border: 4px solid #e2e8f0;
+            border-top: 4px solid #059669;
+            border-radius: 50%;
+            width: 44px;
+            height: 44px;
+            animation: spin 0.9s cubic-bezier(0.55, 0.15, 0.45, 0.85) infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .summary-card {
+            transition: all 0.2s ease-in-out;
+        }
+        .summary-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05);
+        }
+
+        /* Estilização Executiva para Exportação (Captura Crisp de Relatório Oficial) */
+        .export-mode {
+            width: 1440px !important;
+            max-width: none !important;
+            margin: 0 !important;
+            padding: 48px !important;
+            background-color: #f8fafc !important; /* Fundo mais suave e corporativo */
+            border-radius: 0px !important;
+            box-shadow: none !important;
+            
+            /* Posicionamento absoluto no body remove restrições de grid/flex que cortam a captura */
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            z-index: 99999 !important;
+            height: max-content !important; 
+            min-height: 100vh !important;
+            overflow: visible !important;
+        }
+
+        .export-mode .no-export {
+            display: none !important;
+        }
+
+        /* Garantir que nada vaze para fora dos limites no modo exportação */
+        .export-mode * {
+            text-overflow: clip;
+            white-space: normal;
+        }
+
+        .export-mode .bg-white, .export-mode .summary-card {
+            background-color: #ffffff !important; 
+            border-color: #e2e8f0 !important;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05) !important;
+        }
+
+        .export-mode .summary-card {
+            padding: 24px !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: space-between !important;
+        }
+
+        .export-mode h2 { font-size: 26px !important; }
+        .export-mode canvas { min-height: 340px !important; }
+
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+            body {
+                background-color: #ffffff;
+            }
+        }
+    </style>
+</head>
+<body class="antialiased selection:bg-emerald-200 selection:text-emerald-900 min-h-screen flex flex-col">
+
+    <header class="bg-slate-900 text-white sticky top-0 z-40 border-b border-slate-800 shadow-md no-print">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center space-x-3">
+                    <div class="bg-gradient-to-tr from-emerald-500 to-teal-400 p-2.5 rounded-xl shadow-md text-slate-950 font-black">
+                        <svg class="w-5 h-5 text-slate-950" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h1 class="text-base font-extrabold tracking-tight leading-none text-white">Agro Analytics</h1>
+                        <p class="text-[11px] text-slate-400 font-medium">Relatório Comparativo e Ranquamento de Eficiência</p>
+                    </div>
+                </div>
+
+                <!-- Botões de Ação e Exportação -->
+                <div class="flex items-center gap-2.5">
+                    <button onclick="exportToJPEG()" id="btn-export-jpeg" class="inline-flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl transition-all border border-slate-700 shadow-sm active:scale-95">
+                        <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                        <span>Baixar JPEG Executivo</span>
+                    </button>
+                    <button onclick="exportToPDF()" id="btn-export-pdf" class="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-emerald-600/20 active:scale-95">
+                        <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                        <span>Baixar PDF (Folha Única)</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-grow w-full">
+        
+        <!-- Indicador de Carregamento -->
+        <div id="loading-state" class="flex flex-col items-center justify-center py-28">
+            <div class="loader mb-4"></div>
+            <h3 class="text-sm font-bold text-slate-800">Sincronizando e Gerando Relatório Executivo...</h3>
+            <p class="text-slate-500 text-xs mt-1">Consolidando métricas operacionais e indicadores de performance.</p>
+        </div>
+
+        <!-- Toast de Exportação -->
+        <div id="toast-message" class="fixed bottom-6 right-6 z-50 hidden bg-slate-900 text-white text-xs font-semibold px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 border border-slate-700">
+            <span id="toast-spinner" class="animate-spin h-4 w-4 border-2 border-emerald-400 border-t-transparent rounded-full"></span>
+            <span id="toast-text">Sincronizando documento...</span>
+        </div>
+
+        <!-- ÁREA EXPORTÁVEL (Conteúdo com Estilo de Relatório Executivo Oficial) -->
+        <div id="exportable-area" class="hidden space-y-6 bg-white p-6 sm:p-8 rounded-2xl border border-slate-200/80 shadow-md">
+            
+            <div class="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white p-6 rounded-2xl shadow-md border border-slate-800 flex flex-col justify-between gap-5">
+                <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-700/80 pb-4">
+                    <div class="flex items-center gap-3.5">
+                        <div class="w-11 h-11 bg-emerald-500/20 border border-emerald-400/40 rounded-xl flex items-center justify-center flex-shrink-0 text-emerald-400">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        </div>
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <span class="px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-widest bg-emerald-500 text-slate-950">Relatório Executivo Oficial</span>
+                                <span class="text-slate-400 text-xs font-semibold">Agro Analytics &bull; Performance Agrícola</span>
+                            </div>
+                            <h2 class="text-2xl font-black tracking-tight text-white mt-1 leading-tight">Análise Comparativa de Eficiência Operacional</h2>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3 no-export">
+                        <button onclick="fetchData()" class="inline-flex items-center px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs rounded-xl transition-colors border border-slate-700">
+                            <svg class="w-3.5 h-3.5 mr-1.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                            Atualizar Dados
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Grid Metadados do Relatório Executivo -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs font-medium text-slate-300 items-stretch">
+                    <div class="bg-slate-800/60 p-3.5 rounded-xl border border-slate-700/60 flex flex-col justify-center items-center text-center h-full break-words overflow-hidden">
+                        <span class="text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-1 leading-tight">Data da Emissão</span>
+                        <span class="font-bold text-white text-sm leading-tight" id="report-date">--/--/----</span>
+                    </div>
+                    <div class="bg-slate-800/60 p-3.5 rounded-xl border border-slate-700/60 flex flex-col justify-center items-center text-center h-full break-words overflow-hidden">
+                        <span class="text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-1 leading-tight">Operações Analisadas</span>
+                        <span class="font-bold text-white text-sm leading-tight" id="report-modalities-count">3 Modalidades</span>
+                    </div>
+                    <div class="bg-slate-800/60 p-3.5 rounded-xl border border-slate-700/60 flex flex-col justify-center items-center text-center h-full break-words overflow-hidden">
+                        <span class="text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-1 leading-tight">Líder Geral de Eficiência</span>
+                        <span class="font-bold text-emerald-400 text-sm leading-tight" id="report-leader-name">--</span>
+                    </div>
+                    <div class="bg-slate-800/60 p-3.5 rounded-xl border border-slate-700/60 flex flex-col justify-center items-center text-center h-full break-words overflow-hidden">
+                        <span class="text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-1 leading-tight">Economia Máxima obtida</span>
+                        <span class="font-bold text-blue-400 text-sm leading-tight" id="report-max-saving">--</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" id="summary-cards">
+                <!-- Preenchido via JavaScript -->
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                
+                <!-- GRÁFICO 1: RENDIMENTO OPERACIONAL -->
+                <div class="bg-slate-50/70 rounded-2xl shadow-sm p-5 border border-slate-200/90 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-4 pb-2 border-b border-slate-200/60">
+                            <div>
+                                <h3 class="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                                    <span class="w-3 h-3 rounded-full bg-emerald-500 inline-block shadow-sm"></span>
+                                    Gráfico 1 — Produtividade Bruta por Hora
+                                </h3>
+                                <p class="text-[11px] text-slate-500 mt-0.5">Volume total de canteiros finalizados/hora por modalidade</p>
+                            </div>
+                            <span class="px-2.5 py-1 rounded-lg text-[10px] font-extrabold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                Velocidade
+                            </span>
+                        </div>
+                        <div class="relative min-h-[280px] w-full flex items-center justify-center">
+                            <canvas id="chartRendimento"></canvas>
+                        </div>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-slate-200/80 flex items-center justify-between text-[11px] text-slate-600 font-semibold">
+                        <span>* Comparativo percentual relativo ao pico produtivo.</span>
+                        <span id="best-rendimento-label" class="text-emerald-700 font-bold"></span>
+                    </div>
+                </div>
+
+                <!-- GRÁFICO 2: CONSUMO E ECONOMIA DE ADUBO -->
+                <div class="bg-slate-50/70 rounded-2xl shadow-sm p-5 border border-slate-200/90 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-4 pb-2 border-b border-slate-200/60">
+                            <div>
+                                <h3 class="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                                    <span class="w-3 h-3 rounded-full bg-blue-600 inline-block shadow-sm"></span>
+                                    Gráfico 2 — Consumo & Economia de Adubo
+                                </h3>
+                                <p class="text-[11px] text-slate-500 mt-0.5">Massa aplicada (kg) e percentual de insumo economizado</p>
+                            </div>
+                            <span class="px-2.5 py-1 rounded-lg text-[10px] font-extrabold uppercase tracking-wider bg-blue-100 text-blue-800 border border-blue-300">
+                                Insumo
+                            </span>
+                        </div>
+                        <div class="relative min-h-[280px] w-full flex items-center justify-center">
+                            <canvas id="chartFertilizante"></canvas>
+                        </div>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-slate-200/80 flex items-center justify-between text-[11px] text-slate-600 font-semibold">
+                        <span>* Economia calculada em relação ao consumo teto.</span>
+                        <span id="best-economico-label" class="text-blue-700 font-bold"></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-slate-50/70 rounded-2xl shadow-sm border border-slate-200/90 p-5">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 mb-4 border-b border-slate-200/80">
+                    <div class="flex items-center gap-2.5">
+                        <div class="p-2 bg-amber-500 text-slate-950 rounded-xl font-black">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
+                        </div>
+                        <div>
+                            <h3 class="text-base font-extrabold text-slate-900 tracking-tight leading-tight">Ranking Oficial de Eficiência Operacional</h3>
+                            <p class="text-xs text-slate-500 mt-0.5">Pontuação global ponderada (Mão de obra: 35%, Economia adubo: 35%, Velocidade: 15%, Volume mudas: 15%).</p>
+                        </div>
+                    </div>
+                    <div class="text-[11px] text-slate-700 font-bold bg-white px-3.5 py-1.5 rounded-xl border border-slate-200 shadow-sm self-start sm:self-auto">
+                        Escala Ponderada Executiva (0 a 100)
+                    </div>
+                </div>
+
+                <!-- Cards de Classificação do Ranking -->
+                <div id="ranking-list" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <!-- Preenchido via JS -->
+                </div>
+            </div>
+
+            <!-- Rodapé Institucional de Validação do Relatório Executivo -->
+            <div class="pt-3 border-t border-slate-200 text-slate-400 flex flex-col sm:flex-row justify-between items-center text-[10px] font-semibold gap-2">
+                <div class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span>Documento Gerado Automático &bull; Agro Analytics Plataforma de Decisão Operacional</span>
+                </div>
+                <span>Página 1 de 1 &bull; Relatório Unificado</span>
+            </div>
+
+        </div>
+        
+        <!-- Estado de Erro -->
+        <div id="error-state" class="hidden bg-amber-50 border border-amber-200 p-4 mt-6 rounded-2xl shadow-sm no-print">
+            <div class="flex items-start space-x-3">
+                <div class="flex-shrink-0 pt-0.5">
+                    <svg class="h-5 w-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-xs font-bold text-amber-900">Aviso de Conexão com Planilha</h3>
+                    <p class="text-xs text-amber-700 mt-0.5" id="error-message">
+                        Sincronizando com base local de referência oficial.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Registrar Plugin de Rótulos do Chart.js
+        Chart.register(ChartDataLabels);
+
+        // Configurações Globais de Design dos Gráficos
+        Chart.defaults.font.family = "'Inter', sans-serif";
+        Chart.defaults.color = '#475569';
+
+        const sheetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRX-kn5Mpjjrfhe5-as-VfNeRcEkbaqhCb2BKonjFx7v20_2hzZKfCNpKCqItx0flDfq-ovZH8uW8kI/pub?output=csv';
+
+        // Dados Oficiais de Referência Completa
+        const mockData = [
+            { modalidade: 'Manual', pessoas: 2, tempo: 1.0, canteirosTotais: 31.50, canteirosHora: 31.50, canteirosHomemHora: 15.75, mudasHora: 2000, kgAplicado: 250 },
+            { modalidade: 'Aplicador Atual', pessoas: 1, tempo: 1.0, canteirosTotais: 21.00, canteirosHora: 21.00, canteirosHomemHora: 21.00, mudasHora: 1400, kgAplicado: 110 },
+            { modalidade: 'Aplicador Antigo', pessoas: 2, tempo: 1.0, canteirosTotais: 15.75, canteirosHora: 15.75, canteirosHomemHora: 7.87, mudasHora: 1000, kgAplicado: 250 }
+        ];
+
+        let chartRendimentoInstance = null;
+        let chartFertilizanteInstance = null;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const today = new Date();
+            document.getElementById('report-date').innerText = today.toLocaleDateString('pt-BR');
+            fetchData();
+        });
+
+        async function fetchData() {
+            try {
+                const response = await fetch(sheetUrl);
+                if (!response.ok) throw new Error("Erro ao acessar a planilha online.");
+                
+                const csvText = await response.text();
+                
+                Papa.parse(csvText, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: function(results) {
+                        const parsedData = processCsvData(results.data);
+                        if (parsedData.length > 0) {
+                            renderDashboard(parsedData);
+                        } else {
+                            throw new Error("Planilha com formato incorreto.");
+                        }
+                    }
+                });
+            } catch (error) {
+                console.warn("Utilizando dataset de referência:", error.message);
+                document.getElementById('error-state').classList.remove('hidden');
+                renderDashboard(mockData);
+            }
+        }
+
+        function processCsvData(rows) {
+            const processed = [];
+            
+            rows.forEach(row => {
+                let obj = { modalidade: '', pessoas: 0, tempo: 0, canteirosTotais: 0, canteirosHora: 0, canteirosHomemHora: 0, mudasHora: 0, kgAplicado: 0 };
+
+                for (let key of Object.keys(row)) {
+                    let normKey = key.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "");
+                    let val = String(row[key] || '').trim().replace(',', '.');
+                    let numVal = parseFloat(val) || 0;
+                    
+                    if (normKey.includes('modalidade')) {
+                        obj.modalidade = row[key];
+                    } else if (normKey === 'pessoas' || normKey === 'qtdpessoas') {
+                        obj.pessoas = numVal;
+                    } else if (normKey === 'tempo' || normKey === 'horas') {
+                        obj.tempo = numVal;
+                    } else if (normKey.includes('mediadecant') || normKey === 'canteiros') {
+                        obj.canteirosTotais = numVal;
+                    } else if (normKey.includes('canteiros/h') && !normKey.includes('homem')) {
+                        obj.canteirosHora = numVal;
+                    } else if (normKey.includes('canteiros/homem/h')) {
+                        obj.canteirosHomemHora = numVal;
+                    } else if (normKey.includes('mudas/h')) {
+                        obj.mudasHora = numVal;
+                    } else if (normKey.includes('kg') || normKey.includes('aplicada')) {
+                        if(obj.kgAplicado === 0) obj.kgAplicado = numVal;
+                    }
+                }
+
+                if (obj.modalidade && (obj.canteirosHora > 0 || obj.kgAplicado > 0)) {
+                    if (obj.canteirosHora === 0 && obj.canteirosTotais > 0) obj.canteirosHora = obj.canteirosTotais;
+                    processed.push(obj);
+                }
+            });
+
+            return processed;
+        }
+
+        function formatNumber(num, decimals = 1) {
+            if (isNaN(num) || num === null) return '-';
+            return num.toLocaleString('pt-BR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+        }
+
+        function renderDashboard(data) {
+            document.getElementById('loading-state').classList.add('hidden');
+            const content = document.getElementById('exportable-area');
+            content.classList.remove('hidden');
+
+            data.sort((a, b) => a.modalidade.localeCompare(b.modalidade));
+
+            // Indicadores Chave
+            const maxRendimento = Math.max(...data.map(d => d.canteirosHora));
+            const bestProdutivo = data.find(d => d.canteirosHora === maxRendimento);
+            
+            const validKg = data.filter(d => d.kgAplicado > 0);
+            const minKg = Math.min(...validKg.map(d => d.kgAplicado));
+            const maxKg = Math.max(...validKg.map(d => d.kgAplicado));
+            const bestEconomico = validKg.find(d => d.kgAplicado === minKg);
+
+            const maxMaoObra = Math.max(...data.map(d => d.canteirosHomemHora));
+            const bestEficiencia = data.find(d => d.canteirosHomemHora === maxMaoObra);
+
+            const maxMudas = Math.max(...data.map(d => d.mudasHora));
+            const bestMudas = data.find(d => d.mudasHora === maxMudas);
+
+            // Atualização dos Metadados do Cabeçalho Executivo
+            document.getElementById('report-modalities-count').innerText = `${data.length} Modalidades`;
+            document.getElementById('report-leader-name').innerText = bestEficiencia ? bestEficiencia.modalidade : '-';
+            
+            if (maxKg > 0 && minKg > 0) {
+                const econPct = (((maxKg - minKg) / maxKg) * 100).toFixed(0);
+                document.getElementById('report-max-saving').innerText = `-${econPct}% (${bestEconomico.modalidade})`;
+            }
+
+            // Cards de Resumo Executivo (Centralização Perfeita de Conteúdo e Rótulos)
+            const cardsHtml = `
+                <!-- Card 1: Velocidade Brutal -->
+                <div class="summary-card bg-slate-50/90 rounded-2xl p-4 border border-slate-200/90 shadow-sm flex flex-col justify-between items-center text-center overflow-hidden">
+                    <div class="flex items-start justify-between w-full mb-2 gap-2">
+                        <span class="text-[10px] font-black text-slate-400 uppercase tracking-wider text-left leading-tight flex-1">Pico de Velocidade</span>
+                        <div class="p-1.5 bg-emerald-100 text-emerald-800 rounded-lg border border-emerald-200 shrink-0">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                        </div>
+                    </div>
+                    <div class="w-full flex-grow flex flex-col justify-center py-2">
+                        <h4 class="text-base font-black text-slate-900 leading-tight break-words">${bestProdutivo ? bestProdutivo.modalidade : '-'}</h4>
+                        <p class="text-[11px] text-slate-500 font-medium mt-1 leading-tight">Maior volume de canteiros/hora</p>
+                    </div>
+                    <div class="w-full pt-3 border-t border-slate-200/80 flex items-center justify-between gap-1 flex-wrap">
+                        <span class="text-[11px] text-slate-500 font-semibold">Ritmo Bruto</span>
+                        <span class="text-xs font-black text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded-md border border-emerald-200">${bestProdutivo ? formatNumber(bestProdutivo.canteirosHora) : '0'} cant/h</span>
+                    </div>
+                </div>
+
+                <!-- Card 2: Economia de Insumo -->
+                <div class="summary-card bg-slate-50/90 rounded-2xl p-4 border border-slate-200/90 shadow-sm flex flex-col justify-between items-center text-center overflow-hidden">
+                    <div class="flex items-start justify-between w-full mb-2 gap-2">
+                        <span class="text-[10px] font-black text-slate-400 uppercase tracking-wider text-left leading-tight flex-1">Maior Economia</span>
+                        <div class="p-1.5 bg-blue-100 text-blue-800 rounded-lg border border-blue-200 shrink-0">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        </div>
+                    </div>
+                    <div class="w-full flex-grow flex flex-col justify-center py-2">
+                        <h4 class="text-base font-black text-slate-900 leading-tight break-words">${bestEconomico ? bestEconomico.modalidade : '-'}</h4>
+                        <p class="text-[11px] text-slate-500 font-medium mt-1 leading-tight">Menor gasto de fertilizante</p>
+                    </div>
+                    <div class="w-full pt-3 border-t border-slate-200/80 flex items-center justify-between gap-1 flex-wrap">
+                        <span class="text-[11px] text-slate-500 font-semibold">Consumo</span>
+                        <span class="text-xs font-black text-blue-800 bg-blue-100/80 px-2 py-0.5 rounded-md border border-blue-200">${bestEconomico ? formatNumber(bestEconomico.kgAplicado) : '0'} kg</span>
+                    </div>
+                </div>
+
+                <!-- Card 3: Rendimento por Homem/Hora -->
+                <div class="summary-card bg-slate-50/90 rounded-2xl p-4 border border-slate-200/90 shadow-sm flex flex-col justify-between items-center text-center overflow-hidden">
+                    <div class="flex items-start justify-between w-full mb-2 gap-2">
+                        <span class="text-[10px] font-black text-slate-400 uppercase tracking-wider text-left leading-tight flex-1">Eficiência Pessoal</span>
+                        <div class="p-1.5 bg-indigo-100 text-indigo-800 rounded-lg border border-indigo-200 shrink-0">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                        </div>
+                    </div>
+                    <div class="w-full flex-grow flex flex-col justify-center py-2">
+                        <h4 class="text-base font-black text-slate-900 leading-tight break-words">${bestEficiencia ? bestEficiencia.modalidade : '-'}</h4>
+                        <p class="text-[11px] text-slate-500 font-medium mt-1 leading-tight">Rendimento individual otimizado</p>
+                    </div>
+                    <div class="w-full pt-3 border-t border-slate-200/80 flex items-center justify-between gap-1 flex-wrap">
+                        <span class="text-[11px] text-slate-500 font-semibold">Por Homem/Hora</span>
+                        <span class="text-xs font-black text-indigo-800 bg-indigo-100/80 px-2 py-0.5 rounded-md border border-indigo-200">${bestEficiencia ? formatNumber(bestEficiencia.canteirosHomemHora) : '0'} cant</span>
+                    </div>
+                </div>
+
+                <!-- Card 4: Volume de Mudas -->
+                <div class="summary-card bg-slate-50/90 rounded-2xl p-4 border border-slate-200/90 shadow-sm flex flex-col justify-between items-center text-center overflow-hidden">
+                    <div class="flex items-start justify-between w-full mb-2 gap-2">
+                        <span class="text-[10px] font-black text-slate-400 uppercase tracking-wider text-left leading-tight flex-1">Volume de Plantio</span>
+                        <div class="p-1.5 bg-teal-100 text-teal-800 rounded-lg border border-teal-200 shrink-0">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
+                        </div>
+                    </div>
+                    <div class="w-full flex-grow flex flex-col justify-center py-2">
+                        <h4 class="text-base font-black text-slate-900 leading-tight break-words">${bestMudas ? bestMudas.modalidade : '-'}</h4>
+                        <p class="text-[11px] text-slate-500 font-medium mt-1 leading-tight">Taxa de inserção de mudas</p>
+                    </div>
+                    <div class="w-full pt-3 border-t border-slate-200/80 flex items-center justify-between gap-1 flex-wrap">
+                        <span class="text-[11px] text-slate-500 font-semibold">Total Mudas</span>
+                        <span class="text-xs font-black text-teal-800 bg-teal-100/80 px-2 py-0.5 rounded-md border border-teal-200">${bestMudas ? formatNumber(bestMudas.mudasHora, 0) : '0'} /h</span>
+                    </div>
+                </div>
+            `;
+            document.getElementById('summary-cards').innerHTML = cardsHtml;
+
+            if(bestProdutivo) {
+                document.getElementById('best-rendimento-label').innerText = `Melhor: ${bestProdutivo.modalidade} (${formatNumber(bestProdutivo.canteirosHora)} cant/h)`;
+            }
+            if(bestEconomico && maxKg > 0) {
+                const econPct = (((maxKg - minKg) / maxKg) * 100).toFixed(0);
+                document.getElementById('best-economico-label').innerText = `Melhor: ${bestEconomico.modalidade} (${formatNumber(bestEconomico.kgAplicado)} kg | -${econPct}% adubo)`;
+            }
+
+            renderCharts(data, maxKg);
+            renderRankComparativo(data, maxKg);
+        }
+
+        function renderCharts(data, maxKg) {
+            const labels = data.map(d => d.modalidade);
+
+            // --- GRÁFICO 1: RENDIMENTO OPERACIONAL ---
+            const ctx1 = document.getElementById('chartRendimento').getContext('2d');
+            if(chartRendimentoInstance) chartRendimentoInstance.destroy();
+
+            const valuesRendimento = data.map(d => d.canteirosHora);
+            const maxRend = Math.max(...valuesRendimento);
+
+            let gradient1 = ctx1.createLinearGradient(0, 0, 0, 280);
+            gradient1.addColorStop(0, '#059669');
+            gradient1.addColorStop(1, '#10b981');
+
+            chartRendimentoInstance = new Chart(ctx1, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Canteiros/h',
+                        data: valuesRendimento,
+                        backgroundColor: gradient1,
+                        borderRadius: 8,
+                        barPercentage: 0.45
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                            padding: 10,
+                            cornerRadius: 8,
+                            callbacks: {
+                                label: (ctx) => ` Rendimento: ${formatNumber(ctx.parsed.y)} canteiros/hora`
+                            }
+                        },
+                        datalabels: {
+                            anchor: 'end',
+                            align: 'top',
+                            offset: 4,
+                            color: '#0f172a',
+                            font: { weight: 'bold', size: 11 },
+                            formatter: (value) => {
+                                let pct = maxRend > 0 ? ((value / maxRend) * 100).toFixed(0) : 0;
+                                return `${formatNumber(value)} cant/h\n(${pct}%)`;
+                            },
+                            textAlign: 'center'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: '#e2e8f0', drawBorder: false },
+                            grace: '30%',
+                            ticks: { font: { size: 10 } }
+                        },
+                        x: {
+                            grid: { display: false, drawBorder: false },
+                            ticks: { font: { weight: '700', size: 11 } }
+                        }
+                    }
+                }
+            });
+
+            // --- GRÁFICO 2: CONSUMO E ECONOMIA DE ADUBO ---
+            const ctx2 = document.getElementById('chartFertilizante').getContext('2d');
+            if(chartFertilizanteInstance) chartFertilizanteInstance.destroy();
+
+            const valuesFertilizante = data.map(d => d.kgAplicado);
+
+            // Cores dinâmicas: Azul para o mais econômico, cinza/slate para consumos maiores
+            const backgroundColors2 = data.map(d => {
+                if (d.kgAplicado === Math.min(...valuesFertilizante)) {
+                    return '#2563eb'; // Destaque Azul Intenso para o mais econômico
+                }
+                return '#94a3b8'; // Slate para consumos elevados
+            });
+
+            chartFertilizanteInstance = new Chart(ctx2, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Kg Aplicados',
+                        data: valuesFertilizante,
+                        backgroundColor: backgroundColors2,
+                        borderRadius: 8,
+                        barPercentage: 0.45
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                            padding: 10,
+                            cornerRadius: 8,
+                            callbacks: {
+                                label: (ctx) => {
+                                    const val = ctx.parsed.y;
+                                    const econPct = maxKg > 0 ? (((maxKg - val) / maxKg) * 100).toFixed(1) : 0;
+                                    return ` Insumo: ${formatNumber(val)} kg (${econPct > 0 ? '-' + econPct + '% economia' : 'Consumo Max'})`;
+                                }
+                            }
+                        },
+                        datalabels: {
+                            anchor: 'end',
+                            align: 'top',
+                            offset: 4,
+                            color: '#0f172a',
+                            font: { weight: 'bold', size: 11 },
+                            formatter: (value) => {
+                                if (maxKg <= 0) return `${formatNumber(value)} kg`;
+                                const econPct = (((maxKg - value) / maxKg) * 100).toFixed(0);
+                                if (value === maxKg || econPct <= 0) {
+                                    return `${formatNumber(value)} kg\n(Padrão/Max)`;
+                                }
+                                return `${formatNumber(value)} kg\n(-${econPct}% Economia)`;
+                            },
+                            textAlign: 'center'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: '#e2e8f0', drawBorder: false },
+                            grace: '30%',
+                            ticks: { font: { size: 10 } }
+                        },
+                        x: {
+                            grid: { display: false, drawBorder: false },
+                            ticks: { font: { weight: '700', size: 11 } }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderRankComparativo(data, maxKg) {
+            const container = document.getElementById('ranking-list');
+            container.innerHTML = '';
+
+            const maxProd = Math.max(...data.map(d => d.canteirosHora)) || 1;
+            const maxMao = Math.max(...data.map(d => d.canteirosHomemHora)) || 1;
+            const minKgVal = Math.min(...data.filter(d => d.kgAplicado > 0).map(d => d.kgAplicado)) || 1;
+            const maxMudas = Math.max(...data.map(d => d.mudasHora)) || 1;
+
+            const rankedData = data.map(d => {
+                const scoreProd = (d.canteirosHora / maxProd) * 100;
+                const scoreMao = (d.canteirosHomemHora / maxMao) * 100;
+                const scoreInsumo = d.kgAplicado > 0 ? (minKgVal / d.kgAplicado) * 100 : 0;
+                const scoreMudas = (d.mudasHora / maxMudas) * 100;
+
+                const globalScore = (scoreMao * 0.35) + (scoreInsumo * 0.35) + (scoreProd * 0.15) + (scoreMudas * 0.15);
+                const kgPorCanteiro = d.canteirosHora > 0 ? (d.kgAplicado / d.canteirosHora) : 0;
+
+                return {
+                    ...d,
+                    globalScore: Math.round(globalScore * 10) / 10,
+                    scoreMao: Math.round(scoreMao),
+                    scoreInsumo: Math.round(scoreInsumo),
+                    kgPorCanteiro: Math.round(kgPorCanteiro * 100) / 100
+                };
+            });
+
+            rankedData.sort((a, b) => b.globalScore - a.globalScore);
+
+            rankedData.forEach((item, index) => {
+                const pos = index + 1;
+                
+                let posBadge = '';
+                let borderStyle = 'border-slate-200';
+                let rankBg = 'bg-white';
+                let tagColor = 'bg-slate-100 text-slate-700';
+                let tagText = 'Desempenho Mediano';
+
+                if (pos === 1) {
+                    posBadge = `<span class="flex items-center justify-center w-7 h-7 rounded-full bg-amber-400 text-slate-950 font-black text-xs shadow-sm border border-amber-300">1º</span>`;
+                    borderStyle = 'border-amber-400/90 shadow-md shadow-amber-400/10 ring-1 ring-amber-400/40';
+                    rankBg = 'bg-gradient-to-b from-amber-50/50 via-white to-white';
+                    tagColor = 'bg-amber-100 text-amber-900 border border-amber-300 font-extrabold';
+                    tagText = 'LÍDER EM EFICIÊNCIA';
+                } else if (pos === 2) {
+                    posBadge = `<span class="flex items-center justify-center w-7 h-7 rounded-full bg-slate-300 text-slate-900 font-black text-xs shadow-sm border border-slate-200">2º</span>`;
+                    borderStyle = 'border-slate-300';
+                    tagColor = 'bg-slate-100 text-slate-800 font-bold';
+                    tagText = 'ALTO RENDIMENTO';
+                } else {
+                    posBadge = `<span class="flex items-center justify-center w-7 h-7 rounded-full bg-slate-200 text-slate-700 font-black text-xs shadow-sm">3º</span>`;
+                    borderStyle = 'border-slate-200';
+                    tagColor = 'bg-rose-50 text-rose-700 border border-rose-200 font-bold';
+                    tagText = 'CONSUMO ELEVADO';
+                }
+
+                const econVsMax = maxKg > 0 ? (((maxKg - item.kgAplicado) / maxKg) * 100).toFixed(0) : 0;
+
+                const rankCard = document.createElement('div');
+                rankCard.className = `${rankBg} rounded-2xl p-4.5 border ${borderStyle} flex flex-col justify-between relative shadow-sm h-full`;
+                
+                rankCard.innerHTML = `
+                    <div class="flex-grow flex flex-col">
+                        <!-- Cabeçalho da Posição do Ranking com Alinhamento Centralizado -->
+                        <div class="flex items-start justify-between gap-2 mb-3">
+                            <div class="flex items-start gap-2 flex-1">
+                                <div class="shrink-0 mt-0.5">${posBadge}</div>
+                                <h4 class="text-sm font-black text-slate-900 tracking-tight leading-tight break-words">${item.modalidade}</h4>
+                            </div>
+                            <span class="text-[9px] px-2 py-1 rounded-md ${tagColor} uppercase tracking-wider shrink-0 text-center">${tagText}</span>
+                        </div>
+
+                        <!-- Barra de Pontuação Global -->
+                        <div class="mb-4 bg-slate-100/90 p-2.5 rounded-xl border border-slate-200/80">
+                            <div class="flex justify-between items-center text-xs font-bold mb-1.5">
+                                <span class="text-slate-500 uppercase tracking-wider text-[10px]">Pontuação Geral</span>
+                                <span class="text-slate-900 font-black text-sm leading-none">${item.globalScore} <span class="text-[10px] font-semibold text-slate-400">/ 100 pts</span></span>
+                            </div>
+                            <div class="w-full bg-slate-200 h-2.5 rounded-full overflow-hidden">
+                                <div class="bg-gradient-to-r ${pos === 1 ? 'from-emerald-500 to-teal-500' : 'from-blue-500 to-indigo-500'} h-full rounded-full" style="width: ${item.globalScore}%"></div>
+                            </div>
+                        </div>
+
+                        <!-- Detalhamento de Indicadores Chave com Alinhamento Perfeito -->
+                        <div class="space-y-1.5 text-xs text-slate-700 font-medium mb-2">
+                            <div class="flex justify-between items-center py-1.5 border-b border-slate-100 gap-2">
+                                <span class="text-slate-500 text-[11px] leading-tight flex-1">Rendimento / Homem / h:</span>
+                                <span class="font-bold text-slate-900 text-right text-[11px] shrink-0">${formatNumber(item.canteirosHomemHora)} cant/h</span>
+                            </div>
+                            <div class="flex justify-between items-center py-1.5 border-b border-slate-100 gap-2">
+                                <span class="text-slate-500 text-[11px] leading-tight flex-1">Gasto Total de Adubo:</span>
+                                <span class="font-bold text-right text-[11px] shrink-0 ${item.kgAplicado === minKgVal ? 'text-emerald-700 font-black' : 'text-slate-900'}">${formatNumber(item.kgAplicado)} kg ${econVsMax > 0 ? '(-' + econVsMax + '%)' : ''}</span>
+                            </div>
+                            <div class="flex justify-between items-center py-1.5 border-b border-slate-100 gap-2">
+                                <span class="text-slate-500 text-[11px] leading-tight flex-1">Mudas Inseridas / h:</span>
+                                <span class="font-bold text-slate-900 text-right text-[11px] shrink-0">${formatNumber(item.mudasHora, 0)} mud/h</span>
+                            </div>
+                            <div class="flex justify-between items-center py-1.5 gap-2">
+                                <span class="text-slate-500 text-[11px] leading-tight flex-1">Consumo p/ Canteiro:</span>
+                                <span class="font-bold text-slate-900 text-right text-[11px] shrink-0">${formatNumber(item.kgPorCanteiro, 2)} kg/c</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Rodapé com Equipe e Tempo Centralizados -->
+                    <div class="mt-3 pt-3 border-t border-slate-200/60 flex justify-between items-center text-[10px] text-slate-500 font-semibold bg-slate-50/50 -mx-4 -mb-4 px-4 py-3 rounded-b-xl">
+                        <span>Pessoas: <strong class="text-slate-800">${item.pessoas}</strong></span>
+                        <span>Tempo: <strong class="text-slate-800">${formatNumber(item.tempo, 1)} h</strong></span>
+                    </div>
+                `;
+
+                container.appendChild(rankCard);
+            });
+        }
+
+        function showToast(text) {
+            const toast = document.getElementById('toast-message');
+            document.getElementById('toast-text').innerText = text;
+            toast.classList.remove('hidden');
+        }
+
+        function hideToast() {
+            document.getElementById('toast-message').classList.add('hidden');
+        }
+
+        // Variáveis de controle para ancoragem na exportação
+        let originalParent = null;
+        let originalNextSibling = null;
+
+        async function prepareContainerForCapture() {
+            const exportArea = document.getElementById('exportable-area');
+            
+            // Salvar posição original no DOM para não quebrar a UI
+            originalParent = exportArea.parentNode;
+            originalNextSibling = exportArea.nextSibling;
+            
+            // Mover para o body e aplicar position absolute tira a div das amarras 
+            // do flex/scroll que causavam cortes na imagem gerada
+            document.body.appendChild(exportArea);
+            exportArea.classList.add('export-mode');
+            
+            // Rola para o topo para garantir captura integral
+            window.scrollTo(0, 0);
+
+            if(chartRendimentoInstance) {
+                chartRendimentoInstance.resize();
+                chartRendimentoInstance.update('none');
+            }
+            if(chartFertilizanteInstance) {
+                chartFertilizanteInstance.resize();
+                chartFertilizanteInstance.update('none');
+            }
+
+            // Atraso sutil para garantir redimensionamento e reflow correto do DOM isolado
+            await new Promise(resolve => setTimeout(resolve, 800));
+            return exportArea;
+        }
+
+        function restoreContainerAfterCapture() {
+            const exportArea = document.getElementById('exportable-area');
+            exportArea.classList.remove('export-mode');
+            
+            // Retorna a div para o seu local de origem na estrutura da página
+            if (originalNextSibling) {
+                originalParent.insertBefore(exportArea, originalNextSibling);
+            } else {
+                originalParent.appendChild(exportArea);
+            }
+            
+            if(chartRendimentoInstance) {
+                chartRendimentoInstance.resize();
+                chartRendimentoInstance.update('none');
+            }
+            if(chartFertilizanteInstance) {
+                chartFertilizanteInstance.resize();
+                chartFertilizanteInstance.update('none');
+            }
+        }
+
+        async function exportToJPEG() {
+            showToast("Gerando relatório JPEG em alta resolução...");
+            try {
+                const target = await prepareContainerForCapture();
+
+                const canvas = await html2canvas(target, {
+                    scale: 2, // Resolução 2x para nitidez perfeita
+                    useCORS: true,
+                    logging: false,
+                    backgroundColor: '#ffffff'
+                });
+
+                restoreContainerAfterCapture();
+
+                const link = document.createElement('a');
+                link.download = `Agro_Analytics_Relatorio_Executivo_${new Date().toISOString().slice(0,10)}.jpg`;
+                link.href = canvas.toDataURL('image/jpeg', 1.0);
+                link.click();
+            } catch (err) {
+                console.error("Erro ao gerar JPEG:", err);
+            } finally {
+                hideToast();
+            }
+        }
+
+        async function exportToPDF() {
+            showToast("Gerando PDF executivo em folha única...");
+            try {
+                const target = await prepareContainerForCapture();
+
+                const canvas = await html2canvas(target, {
+                    scale: 2, // Nitidez elevada sem pixelização
+                    useCORS: true,
+                    logging: false,
+                    backgroundColor: '#ffffff'
+                });
+
+                restoreContainerAfterCapture();
+
+                const imgData = canvas.toDataURL('image/jpeg', 1.0);
+                const { jsPDF } = window.jspdf;
+                
+                const imgWidth = canvas.width;
+                const imgHeight = canvas.height;
+
+                // PDF customizado que ocupa 100% da área gerada sem cortes laterais ou bordas brancas
+                const pdfWidth = 297; // Largura A4 Paisagem
+                const ratio = pdfWidth / imgWidth;
+                const pdfHeight = imgHeight * ratio;
+
+                const pdf = new jsPDF({
+                    orientation: pdfWidth > pdfHeight ? 'landscape' : 'portrait',
+                    unit: 'mm',
+                    format: [pdfWidth, pdfHeight]
+                });
+
+                pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+                pdf.save(`Agro_Analytics_Relatorio_Executivo_${new Date().toISOString().slice(0,10)}.pdf`);
+
+            } catch (err) {
+                console.error("Erro ao gerar PDF:", err);
+            } finally {
+                hideToast();
+            }
+        }
+    </script>
+</body>
+</html>
